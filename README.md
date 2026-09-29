@@ -15,6 +15,24 @@ Requires Rust 1.88+. `auth set-key` uses a masked prompt and saves the key in th
 
 For CI/headless use, supply `TYPESAFE_API_KEY` through your secret manager/environment. It overrides the saved key; an empty value is an error. Keys are not accepted as command-line arguments or stored in project files. Credentials use a separate `jev.typesafe.ai` keychain entry; they do not read or modify rust-intent-verify's entry.
 
+## Agent skill
+
+The optional [`jev-cli` skill](skills/jev-cli/SKILL.md) teaches coding agents when and how to use the CLI: choosing primitives, writing questions, streaming records, and interpreting results safely.
+
+Install through the external [skills installer](https://github.com/vercel-labs/skills) (requires Node.js/npm):
+
+```sh
+npx skills add ivanblagdan/jev-cli --skill jev-cli
+```
+
+The installer handles harness selection and installation locations. Add `--global` for a user-wide install or `--agent <agent-name>` to select a supported harness explicitly. To install from a local checkout instead:
+
+```sh
+npx skills add . --skill jev-cli
+```
+
+The skill directory and skill name are both `jev-cli`; the executable remains `jev`. Installing the skill does **not** install the binary or configure API credentials—complete the setup above separately. The CLI itself contains no skill installer or harness-specific integration.
+
 ## Three commands
 
 ```sh
