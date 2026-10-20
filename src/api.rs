@@ -35,9 +35,9 @@ pub struct Usage {
 
 #[derive(Serialize)]
 pub struct Output {
-    pub index: usize,
+    input: Value,
+    result: Value,
     model: String,
-    answer: Value,
     usage: Usage,
 }
 
@@ -66,13 +66,8 @@ impl Api {
         }
     }
 
-    pub async fn evaluate(
-        &self,
-        index: usize,
-        state: Value,
-        question: &Question,
-    ) -> Result<Output> {
-        let payload =
+    pub async fn evaluate(&self, state: Value, question: &Question) -> Result<Output> {
+        let mut payload =
             json!({"model": self.model, "state": state, "questions": {"result": question}});
         for attempt in 0..=self.retries {
             self.wait().await;
@@ -114,9 +109,9 @@ impl Api {
                 .validate_answer(&answer)
                 .context("invalid Jev answer")?;
             return Ok(Output {
-                index,
+                input: payload["state"].take(),
+                result: answer,
                 model: response.model,
-                answer,
                 usage: response.usage,
             });
         }
@@ -229,15 +224,46 @@ mod tests {
             api.endpoint = endpoint;
             let parsed: Question = serde_json::from_value(question.clone()).unwrap();
             let result = api
-                .evaluate(0, json!({"data":"example"}), &parsed)
+                .evaluate(json!({"data":"example"}), &parsed)
                 .await
                 .unwrap();
-            assert_eq!(result.answer, answer);
+            assert_eq!(
+                serde_json::to_value(&result).unwrap(),
+                json!({
+                    "input": {"data":"example"},
+                    "result": answer,
+                    "model": "jev-1.13.0",
+                    "usage": {"input_tokens":10,"output_tokens":2}
+                })
+            );
             let requests = task.await.unwrap();
             assert_eq!(
                 requests[0],
                 json!({"model":"jev-1.13.0","state":{"data":"example"},"questions":{"result":question}})
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn output_joins_each_original_input_without_index_or_answer_fields() {
+        let question: Question =
+            serde_json::from_value(json!({"type":"noul","instructions":"Yes?"})).unwrap();
+        for input in [
+            json!("line one\nline two"),
+            json!({"message":"Email [[VEIL:example:1]]", "nested":{"input":1,"result":2}}),
+            json!([{"message":"first"}, "second"]),
+        ] {
+            let response = json!({"model":"jev-1.13.0","answers":{"result":{"type":"noul","noul":0.8}},"usage":{"input_tokens":1,"output_tokens":1}});
+            let (endpoint, task) = server(vec![(200, response)]).await;
+            let mut api = Api::new(&options(), "test-key".into()).unwrap();
+            api.endpoint = endpoint;
+            let output = api.evaluate(input.clone(), &question).await.unwrap();
+            let serialized = serde_json::to_value(output).unwrap();
+            assert_eq!(serialized["input"], input);
+            assert_eq!(serialized["result"], json!({"type":"noul","noul":0.8}));
+            assert!(serialized.get("index").is_none());
+            assert!(serialized.get("answer").is_none());
+            assert_eq!(task.await.unwrap()[0]["state"], input);
         }
     }
 
@@ -270,7 +296,7 @@ mod tests {
         let (endpoint, task) = server(vec![(429, json!({})), (429, json!({}))]).await;
         let mut api = Api::new(&options(), "test-key".into()).unwrap();
         api.endpoint = endpoint;
-        assert!(api.evaluate(0, json!("state"), &q).await.is_err());
+        assert!(api.evaluate(json!("state"), &q).await.is_err());
         assert_eq!(task.await.unwrap().len(), 2);
     }
 
@@ -286,7 +312,7 @@ mod tests {
             let mut api = Api::new(&options, "test-key".into()).unwrap();
             api.endpoint = endpoint;
             assert_eq!(
-                api.evaluate(0, json!("state"), &q).await.is_ok(),
+                api.evaluate(json!("state"), &q).await.is_ok(),
                 model == "jev-latest"
             );
             task.await.unwrap();
@@ -302,7 +328,7 @@ mod tests {
             let (endpoint, task) = server(vec![(status, json!({})), (200, good.clone())]).await;
             let mut api = Api::new(&options(), "test-key".into()).unwrap();
             api.endpoint = endpoint;
-            assert!(api.evaluate(0, json!("state"), &q).await.is_ok());
+            assert!(api.evaluate(json!("state"), &q).await.is_ok());
             assert_eq!(task.await.unwrap().len(), 2);
         }
         for (status, body) in [
@@ -315,7 +341,7 @@ mod tests {
             let (endpoint, task) = server(vec![(status, body)]).await;
             let mut api = Api::new(&options(), "test-key".into()).unwrap();
             api.endpoint = endpoint;
-            assert!(api.evaluate(0, json!("state"), &q).await.is_err());
+            assert!(api.evaluate(json!("state"), &q).await.is_err());
             task.await.unwrap();
         }
     }

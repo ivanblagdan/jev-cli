@@ -35,7 +35,7 @@ async fn run() -> Result<()> {
         states,
         tokio::io::stdout(),
         options.concurrency.into(),
-        |index, state| api.evaluate(index, state, &question),
+        |_, state| api.evaluate(state, &question),
     )
     .await
 }

@@ -67,7 +67,7 @@ jev noul 'Does this record contain contradictory labels?' \
   --input jsonl --concurrency 8 < dataset.jsonl > decisions.jsonl
 
 # Leave selection policy to ordinary tools.
-jq -c 'select(.answer.noul >= 0.9) | {index, probability: .answer.noul}' decisions.jsonl
+jq -c 'select(.result.noul >= 0.9) | {input, probability: .result.noul}' decisions.jsonl
 ```
 
 Input must be piped or redirected, not an interactive terminal. Empty single-state input is an error. An empty stream yields no results (credentials are still checked).
@@ -78,14 +78,16 @@ This is not server-side dataset batching. TypeSafe also supports several questio
 
 ## Output contract
 
+Each result includes its original input. This replaces the earlier `index`/`answer` envelope with `input`/`result`; existing consumers should use `.result` instead of `.answer` and no longer need an index-based join. JSON values are preserved, not their original whitespace or key ordering.
+
 One compact JSON object per input state, on one line:
 
 ```json
-{"index":0,"model":"jev-1.13.0","answer":{"type":"noul","noul":0.95},"usage":{"input_tokens":296,"output_tokens":20}}
+{"input":{"message":"Database connection refused"},"model":"jev-1.13.0","result":{"type":"noul","noul":0.95},"usage":{"input_tokens":296,"output_tokens":20}}
 ```
 
-- `index` is the zero-based input record index (always 0 for single-state input). It allows joining results back to inputs without copying potentially sensitive records into output.
-- `answer` retains the API's answer object, including probabilities/confidence where provided.
+- `input` preserves the original JSON value; text/line inputs are strings. Results are self-contained, so no index-based join is needed. Output files contain source data and must be handled with the same care as inputs.
+- `result` retains the API's answer object, including probabilities/confidence where provided.
 - `model` is the actual model reported by the service.
 - `usage` contains input/output token counts for the successful request, not cumulative retry billing.
 

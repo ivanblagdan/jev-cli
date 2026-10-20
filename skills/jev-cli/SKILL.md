@@ -88,20 +88,20 @@ One request is made per record using the same question. Concurrency is bounded a
 Each stdout line is a JSON object:
 
 ```json
-{"index":0,"model":"jev-1.13.0","answer":{"type":"noul","noul":0.95},"usage":{"input_tokens":296,"output_tokens":20}}
+{"input":{"message":"Database connection refused"},"model":"jev-1.13.0","result":{"type":"noul","noul":0.95},"usage":{"input_tokens":296,"output_tokens":20}}
 ```
 
-- `index` is the zero-based record position; join results to the exact input stream used. Preserve that input's ordering and do not join against a subsequently filtered or reordered dataset.
-- `answer` retains the primitive's result, including distributions and confidence where available.
+- `input` preserves the original JSON value; text/line inputs are strings. Results are self-contained, so no index-based join is needed. Output files contain source data and must be handled with the same care as inputs.
+- `result` retains the primitive's result, including distributions and confidence where available.
 - `model` records the resolved model. Prefer a pinned `--model` for repeatable evaluations; model judgments are not guarantees of determinism.
 - `usage` counts tokens for the successful request, not cumulative retry billing.
 
 For quick extraction:
 
 ```sh
-jq -r '.answer.choice' choices.jsonl
-jq '.answer.score' scores.jsonl
-jq '.answer.noul' decisions.jsonl
+jq -r '.result.choice' choices.jsonl
+jq '.result.score' scores.jsonl
+jq '.result.noul' decisions.jsonl
 ```
 
 Apply acceptance thresholds in code, based on the user's policy or validation data—not an invented universal cutoff. Preserve probabilities when uncertain cases need review. A low probability or confidence does not make the CLI exit unsuccessfully.

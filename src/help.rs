@@ -19,7 +19,7 @@ COMPOSITION:
   State comes from piped/redirected stdin. stdout contains JSON only;
   diagnostics go to stderr. Use --input text/json for one state, or lines/jsonl
   for a stream. Streaming is bounded and preserves input order.
-  Each output contains index (zero-based), model, answer, and usage (token counts).
+  Each output contains input, result, model, and usage (token counts).
   One question and one API request per state; no thresholds or filtering.
   On failure output may be partial. Exit codes: 0 success, 1 runtime error,
   2 command-line syntax error. Use `set -o pipefail` in shell pipelines.
@@ -66,12 +66,13 @@ const IO: &str = r#"INPUT:
 
 OUTPUT:
   One compact JSON object per state, flushed in input order:
-    {"index":0,"model":"jev-1.13.0","answer":{...},"usage":{"input_tokens":296,"output_tokens":20}}
-  index is zero-based (0 for a single state); join it back to your input records.
-  model is the resolved model; answer is the API answer shown above. usage is
-  token usage for the successful request, not cumulative retry billing.
-  stdout is JSON only; diagnostics go to stderr. Apply thresholds/filtering
-  downstream with tools such as jq; model judgments do not change exit status.
+    {"input":{"message":"Database connection refused"},"model":"jev-1.13.0","result":{...},"usage":{"input_tokens":296,"output_tokens":20}}
+  input preserves the original JSON value; text/lines are strings. Output contains
+  source data: handle output files with the same care as inputs. model is the
+  resolved model; result is the API answer. usage counts successful-request tokens,
+  not cumulative retry billing. stdout is JSON only; diagnostics go to stderr.
+  Apply thresholds/filtering downstream with tools such as jq; model judgments
+  do not change exit status.
 
 QUESTION FILES:
   --question-file reads one API question object, not a whole API request.
@@ -137,7 +138,7 @@ ANSWER EXAMPLE:
   printf '%s' 'Database connection refused' | jev noul 'Does this indicate an outage?'
   jev noul 'Does this indicate an outage?' --input lines < events.log
   jev noul 'Are the labels contradictory?' --input jsonl --concurrency 8 < dataset.jsonl > decisions.jsonl
-  jq -c 'select(.answer.noul >= 0.9) | {index, probability: .answer.noul}' decisions.jsonl
+  jq -c 'select(.result.noul >= 0.9) | {input, probability: .result.noul}' decisions.jsonl
   jev noul --question-file urgency.json --input jsonl < tickets.jsonl
 
 QUESTION FILE (urgency.json):
